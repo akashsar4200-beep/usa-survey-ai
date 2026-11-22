@@ -80,6 +80,8 @@ PERSONAS_FILE = os.path.join(BASE_DIR, "personas.json")
 @app.route("/")
 def index():
     index_path = os.path.join(BASE_DIR, "public", "index.html")
+    if not os.path.exists(index_path):
+        return f"File not found at: {index_path}", 404
     with open(index_path, "r", encoding="utf-8") as f:
         return f.read(), 200, {"Content-Type": "text/html; charset=utf-8"}
 
