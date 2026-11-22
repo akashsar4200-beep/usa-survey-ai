@@ -68,8 +68,12 @@ def load_json(path, default):
 
 
 def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+    except OSError:
+        # Vercel read-only filesystem-এ ক্র্যাশ এড়াতে নিরাপদে ইগনোর করা হলো
+        pass
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
