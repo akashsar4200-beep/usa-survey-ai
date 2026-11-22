@@ -79,7 +79,9 @@ PERSONAS_FILE = os.path.join(BASE_DIR, "personas.json")
 
 @app.route("/")
 def index():
-    return send_from_directory(app.static_folder, "index.html")
+    index_path = os.path.join(BASE_DIR, "public", "index.html")
+    with open(index_path, "r", encoding="utf-8") as f:
+        return f.read(), 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
 @app.route("/<path:path>")
