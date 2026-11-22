@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>USA Survey AI Assistant - Web</title>
+<style>
+  :root {
+    --bg: #1e1e1e;
+    --panel: #252526;
+    --field: #2d2d30;
+    --border: #3e3e42;
+    --text: #e0e0e0;
+    --text-soft: #cccccc;
+    --accent: #10a37f;
+    --accent-hover: #0d8a6b;
+    --blue: #61afef;
+    --warn: #98c379;
+    --err: #e06c75;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  .container {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 18px 16px 40px;
+  }
+  h3 { margin-bottom: 4px; font-weight: 600; color: var(--text); }
+
+  /* ---------- bars ---------- */
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  select, input, textarea {
+    background: var(--field);
+    color: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 14px;
+  }
+  select:focus, input:focus, textarea:focus { outline: 1px solid var(--accent); }
+  label { color: var(--text-soft); font-size: 13px; }
+  .btn {
+    background: #3a3d41;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .btn:hover { background: #4e5257; }
+  .btn.primary {
+    background: var(--accent);
+    font-weight: 700;
+  }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.small { padding: 5px 8px; font-size: 12px; }
+  .btn.red { background: #6b2c2c; }
+  .btn.red:hover { background: #844040; }
+  .btn.blue { background: #2b5b84; font-weight: 700; }
+  .btn.blue:hover { background: #376fa3; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+  .grow { flex: 1; }
+  .model-col { display: flex; align-items: center; gap: 4px; }
+  .api-col { display: flex; align-items: center; gap: 6px; }
+
+  #modelSelect { min-width: 230px; }
+
+  /* ---------- chat ---------- */
+  #chat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    min-height: 320px;
+    padding: 14px 16px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+  }
+  .note {
+    color: #888;
+    font-size: 12px;
+    margin: 6px 0;
+  }
+  .note i { color: #888; }
+  .msg-user { color: var(--blue); margin-top: 10px; }
+  .msg-user b { color: var(--blue); }
+  .msg-ai {
+    background: #252526;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+  .msg-ai b { color: var(--text); }
+  .badge {
+    background: #2d5a27;
+    color: #a3e635;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    display: inline-block;
+  }
+  .msg-err { color: var(--err); margin-top: 8px; }
+  .img-tag { color: var(--warn); }
+
+  /* ---------- preview ---------- */
+  #preview {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+  }
+  #preview img { width: 70px; height: 50px; border-radius: 4px; object-fit: cover; }
+  #preview .plabel { color: var(--warn); font-weight: 700; }
+
+  /* ---------- input row ---------- */
+  .input-row { display: flex; gap: 10px; }
+  #prompt {
+    flex: 1;
+    min-height: 80px;
+    resize: vertical;
+  }
+  .btn-col { display: flex; flex-direction: column; gap: 6px; }
+  .btn-col .btn { width: 110px; }
+  .sub-row { display: flex; gap: 6px; }
+
+  .card-title { color: var(--text); font-weight: 700; }
+  #status { color: #888; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h3>USA Survey AI Assistant</h3>
+  <div id="status">Loading…</div>
+
+  <!-- Top bar: provider / api key / model / thinking / search -->
+  <div class="bar">
+    <select id="providerSelect">
+      <option value="Gemini">Gemini</option>
+      <option value="OpenRouter">OpenRouter</option>
+    </select>
+    <label>API Key:</label>
+    <div class="api-col grow">
+      <input id="apiKey" type="password" placeholder="Paste API key here" class="grow" />
+      <button id="toggleKeyBtn" class="btn small">Show</button>
+    </div>
+    <div class="model-col">
+      <select id="modelSelect"></select>
+      <button id="addModelBtn" class="btn small" title="Add Custom Model">+</button>
+      <button id="delModelBtn" class="btn small" title="Remove Selected Model">-</button>
+    </div>
+    <label>Thinking:</label>
+    <select id="thinkingSelect">
+      <option value="low">low</option>
+      <option value="medium">medium</option>
+      <option value="high">high</option>
+    </select>
+    <label><input type="checkbox" id="searchCheck" /> Auto Web Search</label>
+  </div>
+
+  <!-- Persona bar -->
+  <div class="bar">
+    <label>Active Persona:</label>
+    <select id="personaSelect" class="grow"></select>
+    <button id="addPersonaBtn" class="btn small">+ New</button>
+    <button id="editPersonaBtn" class="btn small">Edit</button>
+    <button id="delPersonaBtn" class="btn small red">Delete</button>
+    <button id="newSurveyBtn" class="btn blue">🔄 New Survey (Clear Chat)</button>
+  </div>
+
+  <!-- Chat -->
+  <div id="chat"></div>
+
+  <!-- Image preview -->
+  <div id="preview">
+    <img id="previewImg" alt="preview" />
+    <div class="plabel">🖼️ Image attached (ready to send)</div>
+    <button id="removeImgBtn" class="btn red small">✕ Remove</button>
+  </div>
+
+  <!-- Input -->
+  <div class="input-row">
+    <textarea id="prompt" placeholder="Paste survey question OR Ctrl+V screenshot... (Enter = Send, Shift+Enter = New Line)"></textarea>
+    <div class="btn-col">
+      <button id="sendBtn" class="btn primary">Ask AI (Enter)</button>
+      <div class="sub-row">
+        <button id="uploadBtn" class="btn">📎 Image</button>
+        <button id="copyBtn" class="btn">Copy Last</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ================= state ================= */
+const state = {
+  provider: "OpenRouter",
+  api_key: "",
+  openrouter_api_key: "",
+  model: "",
+  openrouter_model: "",
+  gemini_models: [],
+  openrouter_models: [],
+  thinking_level: "medium",
+  personas: {},
+  history: [],          // OpenRouter conversation history
+  last_interaction_id: null,
+  last_ai_response: "",
+  pending_image_b64: null,
+  pending_image_mime: "image/png",
+};
+
+const DEFAULT_GEMINI_MODELS = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"];
+const DEFAULT_OPENROUTER_MODELS = [
+  "nvidia/nemotron-mini",
+  "anthropic/claude-3.5-sonnet",
+  "anthropic/claude-3-sonnet",
+  "anthropic/claude-3-opus",
+];
+const STRICT_SYSTEM_TEMPLATE = `You are strictly acting as the persona defined below to answer USA market research surveys.
+
+[PERSONA PROFILE]
+{persona_details}
+
+[STRICT RULES]
+1. CONSISTENCY: Never contradict any detail from the profile above or any previous answer given in this conversation. If a question asks something not explicitly listed in the profile, deduce a logical, realistic detail fitting a US resident of this demographic, and stick to it for the rest of the chat.
+2. NO HALLUCINATION & WEB SEARCH: If a survey asks about a specific real-world US brand, recent event, TV show, product, or price you are not 100% certain about, ALWAYS use Web Search to verify facts before answering. Never guess.
+3. TRAP / ATTENTION CHECK QUESTIONS: Carefully analyze questions (and screenshots) for attention checks or fake/non-existent brands. Verify via search if unsure, and explicitly warn me if an option is a fake trap.
+4. OUTPUT FORMAT:
+   - Start with **[EXACT ANSWER TO SELECT]** clearly in bold.
+   - Below it, provide a 1-sentence brief reason or any newly invented persona fact I should remember for this survey.
+`;
+
+/* ================= dom refs ================= */
+const $ = (id) => document.getElementById(id);
+const chatEl = $("chat");
+const statusEl = $("status");
+
+/* ================= helpers ================= */
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function nl2br(s) {
+  return esc(s).replace(/\n/g, "<br>");
+}
+function pending_api_key() {
+  return state.provider === "OpenRouter" ? state.openrouter_api_key : state.api_key;
+}
+function model_list_key() {
+  return state.provider === "OpenRouter" ? "openrouter_models" : "gemini_models";
+}
+function get_active_persona() {
+  return $("personaSelect").value;
+}
+function appendNote(text) {
+  chatEl.innerHTML += `<div class="note"><i>— ${esc(text)} —</i></div>`;
+}
+function appendUser(text, imgTag) {
+  chatEl.innerHTML +=
+    `<div class="msg-user"><b>You:</b>${imgTag}<br>${text ? nl2br(text) : "<i>(Analyze screenshot)</i>"}</div>`;
+}
+function appendAI(text, used_search, personaName) {
+  const badge = used_search
+    ? ' <span class="badge">🌐 Web Search Verified</span>'
+    : "";
+  chatEl.innerHTML +=
+    `<div class="msg-ai"><b>AI (${esc(personaName)}):</b>${badge}<br><br>${nl2br(text)}</div>`;
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+function appendError(msg) {
+  chatEl.innerHTML += `<div class="msg-err"><b>Error:</b> ${esc(msg)}</div>`;
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+/* ================= config / personas API ================= */
+async function api(path, method = "GET", body = null) {
+  const opts = { method, headers: {} };
+  if (body) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  const resp = await fetch(path, opts);
+  if (!resp.ok) {
+    const data = await resp.json();
+    throw new Error(data.error || `Request failed (${resp.status})`);
+  }
+  return resp.json();
+}
+
+async function loadConfig() {
+  const cfg = await api("/api/config");
+  state.gemini_models = cfg.gemini_models || DEFAULT_GEMINI_MODELS;
+  state.openrouter_models = cfg.openrouter_models || DEFAULT_OPENROUTER_MODELS;
+  state.provider = cfg.provider || "OpenRouter";
+  state.api_key = cfg.api_key || "";
+  state.openrouter_api_key = cfg.openrouter_api_key || "";
+  state.model = cfg.model || DEFAULT_GEMINI_MODELS[0];
+  state.openrouter_model = cfg.openrouter_model || DEFAULT_OPENROUTER_MODELS[0];
+  state.thinking_level = cfg.thinking_level || "medium";
+}
+
+async function loadPersonas() {
+  state.personas = await api("/api/personas");
+  $("personaSelect").innerHTML = "";
+  Object.keys(state.personas).forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    $("personaSelect").appendChild(opt);
+  });
+}
+
+async function persistConfig() {
+  const body = {
+    provider: state.provider,
+    api_key: state.api_key,
+    openrouter_api_key: state.openrouter_api_key,
+    model: state.model,
+    openrouter_model: state.openrouter_model,
+    gemini_models: state.gemini_models,
+    openrouter_models: state.openrouter_models,
+    thinking_level: state.thinking_level,
+  };
+  await api("/api/config", "POST", body);
+}
+
+/* ================= UI wiring ================= */
+const providerSelect = $("providerSelect");
+const apiKeyInput = $("apiKey");
+const modelSelect = $("modelSelect");
+const thinkingSelect = $("thinkingSelect");
+const searchCheck = $("searchCheck");
+const promptInput = $("prompt");
+const sendBtn = $("sendBtn");
+
+function refreshModelList() {
+  const list = model_list_key() === "openrouter_models"
+    ? state.openrouter_models
+    : state.gemini_models;
+  modelSelect.innerHTML = "";
+  list.forEach((m) => {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = m;
+    modelSelect.appendChild(opt);
+  });
+  const saved = state.provider === "OpenRouter" ? state.openrouter_model : state.model;
+  if (saved && !list.includes(saved)) {
+    const opt = document.createElement("option");
+    opt.value = saved;
+    opt.textContent = saved;
+    modelSelect.appendChild(opt);
+  }
+  if (saved) modelSelect.value = saved;
+}
+
+function applyProviderUI() {
+  refreshModelList();
+  apiKeyInput.value =
+    state.provider === "OpenRouter" ? state.openrouter_api_key : state.api_key;
+}
+
+providerSelect.addEventListener("change", () => {
+  state.provider = providerSelect.value;
+  persistConfig().catch(console.error);
+  applyProviderUI();
+  clearChat();
+  appendNote(`Switched Provider to: ${state.provider}`);
+});
+
+apiKeyInput.addEventListener("input", () => {
+  const val = apiKeyInput.value.trim();
+  if (state.provider === "OpenRouter") state.openrouter_api_key = val;
+  else state.api_key = val;
+  persistConfig().catch(console.error);
+});
+
+$("toggleKeyBtn").addEventListener("click", () => {
+  const btn = $("toggleKeyBtn");
+  if (apiKeyInput.type === "password") {
+    apiKeyInput.type = "text";
+    btn.textContent = "Hide";
+  } else {
+    apiKeyInput.type = "password";
+    btn.textContent = "Show";
+  }
+});
+
+modelSelect.addEventListener("change", () => {
+  const val = modelSelect.value;
+  if (!val.trim()) return;
+  if (state.provider === "OpenRouter") state.openrouter_model = val;
+  else state.model = val;
+  persistConfig().catch(console.error);
+});
+
+thinkingSelect.addEventListener("change", () => {
+  state.thinking_level = thinkingSelect.value;
+  persistConfig().catch(console.error);
+});
+
+/* add / remove custom model */
+$("addModelBtn").addEventListener("click", async () => {
+  const example =
+    state.provider === "OpenRouter" ? "deepseek/deepseek-r1:free" : "gemini-3.8-flash";
+  const val = prompt(`Enter exact Model ID (e.g., ${example}):`).trim();
+  if (!val) return;
+  const list = model_list_key();
+  const arr = list === "openrouter_models" ? state.openrouter_models : state.gemini_models;
+  if (!arr.includes(val)) {
+    arr.push(val);
+    persistConfig().catch(console.error);
+  }
+  refreshModelList();
+  modelSelect.value = val;
+  if (state.provider === "OpenRouter") state.openrouter_model = val;
+  else state.model = val;
+  persistConfig().catch(console.error);
+  appendNote(`Added custom model: ${val}`);
+});
+
+$("delModelBtn").addEventListener("click", () => {
+  const list = model_list_key();
+  const arr = list === "openrouter_models" ? state.openrouter_models : state.gemini_models;
+  if (arr.length <= 1) {
+    appendError("At least one model must remain in the list.");
+    return;
+  }
+  const current = modelSelect.value;
+  const idx = arr.indexOf(current);
+  if (idx >= 0) {
+    arr.splice(idx, 1);
+    persistConfig().catch(console.error);
+    refreshModelList();
+    appendNote(`Removed model: ${current}`);
+  }
+});
+
+/* personas */
+$("addPersonaBtn").addEventListener("click", async () => {
+  const name = prompt("Persona Name:").trim();
+  if (!name) return;
+  const details = prompt("Persona Details (Age, ZIP, Job, Income, Kids, Brands...):").trim();
+  if (!details) return;
+  const res = await api("/api/personas", "POST", { name, details });
+  state.personas = res.personas;
+  loadPersonas();
+  $("personaSelect").value = name;
+  clearChat();
+  appendNote(`Switched Persona to: ${name}`);
+});
+
+$("editPersonaBtn").addEventListener("click", async () => {
+  const oldName = get_active_persona();
+  if (!oldName) return;
+  const newName = prompt("Persona Name:", oldName).trim();
+  const details = prompt("Persona Details:", state.personas[oldName]).trim();
+  if (!newName || !details) return;
+  const res = await api("/api/personas/" + encodeURIComponent(oldName), "PUT", {
+    new_name: newName,
+    details,
+  });
+  state.personas = res.personas;
+  loadPersonas();
+  $("personaSelect").value = newName;
+});
+
+$("delPersonaBtn").addEventListener("click", async () => {
+  const name = get_active_persona();
+  if (!name) return;
+  if (Object.keys(state.personas).length <= 1) {
+    appendError("At least one persona must remain.");
+    return;
+  }
+  const res = await api("/api/personas/" + encodeURIComponent(name), "DELETE");
+  state.personas = res.personas;
+  loadPersonas();
+});
+
+/* new survey */
+$("newSurveyBtn").addEventListener("click", clearChat);
+$("removeImgBtn").addEventListener("click", clearAttachedImage);
+
+/* ================= image handling ================= */
+function clearAttachedImage() {
+  state.pending_image_b64 = null;
+  $("preview").style.display = "none";
+}
+
+$("uploadBtn").addEventListener("click", () => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/png,image/jpeg,image/webp,image/bmp";
+  input.onchange = () => {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = reader.result.split(",")[1]; // base64 part of data URI
+      state.pending_image_b64 = b64;
+      state.pending_image_mime = file.type || "image/png";
+      $("previewImg").src = reader.result;
+      $("preview").style.display = "flex";
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+});
+
+document.addEventListener("paste", (e) => {
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const item of items) {
+    if (item.type && item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const b64 = reader.result.split(",")[1];
+          state.pending_image_b64 = b64;
+          state.pending_image_mime = file.type || "image/png";
+          $("previewImg").src = reader.result;
+          $("preview").style.display = "flex";
+        };
+        reader.readAsDataURL(file);
+        break;
+      }
+    }
+  }
+});
+
+/* ================= chat flow ================= */
+function clearChat() {
+  state.history = [];
+  state.last_interaction_id = null;
+  clearAttachedImage();
+  chatEl.innerHTML = "";
+  appendNote("New survey session started. Memory cleared for fresh consistency.");
+}
+
+function buildSystemPrompt() {
+  const persona = get_active_persona();
+  const details = state.personas[persona] || "";
+  return STRICT_SYSTEM_TEMPLATE.replace("{persona_details}", details);
+}
+
+sendBtn.addEventListener("click", sendMessage);
+
+promptInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+async function sendMessage() {
+  const apiKey = pending_api_key();
+  if (!apiKey) {
+    appendError(`Please enter your ${state.provider} API Key first.`);
+    return;
+  }
+  const userText = promptInput.value.trim();
+  const imgB64 = state.pending_image_b64;
+  if (!userText && !imgB64) return;
+
+  promptInput.value = "";
+  clearAttachedImage();
+  sendBtn.disabled = true;
+  sendBtn.textContent = "Thinking...";
+
+  const imgTag = imgB64 ? ' <span class="img-tag">[🖼️ Screenshot Attached]</span>' : "";
+  appendUser(userText, imgTag);
+
+  try {
+    const res = await api("/api/chat", "POST", {
+      provider: state.provider,
+      api_key: apiKey,
+      model: modelSelect.value,
+      system_instruction: buildSystemPrompt(),
+      history: state.history,
+      user_prompt: userText,
+      use_search: searchCheck.checked,
+      thinking_level: thinkingSelect.value,
+      image_b64: imgB64,
+      image_mime: state.pending_image_mime,
+    });
+
+    const aiText = res.response_text || "";
+    const usedSearch = res.used_search === true;
+
+    // maintain conversation memory
+    if (state.provider === "OpenRouter") {
+      const savedUser = userText || "[Survey screenshot analyzed]";
+      state.history.push({
+        role: "user",
+        content: imgB64 && userText ? `${userText} [with screenshot]` : savedUser,
+      });
+      const assistantMsg = { role: "assistant", content: aiText };
+      if (res.reasoning_details) assistantMsg.reasoning_details = res.reasoning_details;
+      state.history.push(assistantMsg);
+    } else if (res.interaction_id) {
+      state.last_interaction_id = res.interaction_id;
+    }
+
+    state.last_ai_response = aiText;
+    appendAI(aiText, usedSearch, get_active_persona());
+  } catch (err) {
+    appendError(err.message);
+  }
+
+  sendBtn.disabled = false;
+  sendBtn.textContent = "Ask AI (Enter)";
+}
+
+/* copy last response */
+$("copyBtn").addEventListener("click", () => {
+  if (state.last_ai_response) {
+    navigator.clipboard.writeText(state.last_ai_response);
+  }
+});
+
+/* ================= init ================= */
+(async function init() {
+  try {
+    await loadConfig();
+  } catch (e) {
+    console.warn("Config load failed, using defaults:", e);
+  }
+  await loadPersonas();
+  providerSelect.value = state.provider;
+  thinkingSelect.value = state.thinking_level;
+  applyProviderUI();
+  appendNote(
+    `Loaded Provider: ${state.provider} | Persona: ${get_active_persona()}`
+  );
+  statusEl.textContent = "";
+})();
+</script>
+</body>
+</html>
