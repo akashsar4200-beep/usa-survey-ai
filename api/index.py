@@ -242,57 +242,61 @@ def chat():
             })
 
         # ================= GEMINI =================
+        from google.genai import types
+
         client = genai.Client(api_key=api_key)
-        tools = [{"type": "google_search"}] if use_search else None
 
+        contents = []
         if image_b64:
-            input_payload = [
-                {"type": "text", "text": user_prompt or "Analyze this image."},
-                {
-                    "type": "image",
-                    "data": image_b64,
-                    "mime_type": image_mime,
-                },
-            ]
+            img_bytes = base64.b64decode(image_b64)
+            contents.append(
+                types.Part.from_bytes(
+                    data=img_bytes,
+                    mime_type=image_mime or "image/png",
+                )
+            )
+            contents.append(user_prompt or "Analyze this image.")
         else:
-            input_payload = user_prompt
+            contents.append(user_prompt or "Analyze this survey question.")
 
-        kwargs = {
-            "model": model_name.strip(),
-            "input": input_payload,
-            "system_instruction": system_instruction,
-            "generation_config": {
-                "thinking_level": thinking_level,
-            },
-        }
+        config_kwargs = {}
+        if system_instruction:
+            config_kwargs["system_instruction"] = system_instruction
 
-        if tools:
-            kwargs["tools"] = tools
+        if use_search:
+            config_kwargs["tools"] = [{"google_search": {}}]
 
-        interaction = client.interactions.create(**kwargs)
+        if thinking_level:
+            try:
+                config_kwargs["thinking_config"] = types.ThinkingConfig(
+                    thinking_level=str(thinking_level).upper()
+                )
+            except Exception:
+                pass
 
-        response_text = getattr(interaction, "output_text", None) or ""
+        config = types.GenerateContentConfig(**config_kwargs)
+
+        response = client.models.generate_content(
+            model=model_name.strip(),
+            contents=contents,
+            config=config,
+        )
+
+        response_text = getattr(response, "text", None) or ""
         used_search = False
 
-        steps = getattr(interaction, "steps", None) or []
-        collected_texts = []
-        for step in steps:
-            step_type = getattr(step, "type", "")
-            if step_type in ("google_search_call", "google_search_result"):
+        for cand in getattr(response, "candidates", None) or []:
+            meta = getattr(cand, "grounding_metadata", None)
+            if meta and (
+                getattr(meta, "web_search_queries", None)
+                or getattr(meta, "grounding_chunks", None)
+            ):
                 used_search = True
-            if step_type == "model_output":
-                for block in getattr(step, "content", None) or []:
-                    if getattr(block, "type", "") == "text" and getattr(block, "text", None):
-                        collected_texts.append(block.text)
-
-        if not response_text and collected_texts:
-            response_text = "\n".join(collected_texts)
-
-        new_interaction_id = getattr(interaction, "id", "") or ""
+                break
 
         return jsonify({
             "response_text": response_text,
-            "interaction_id": new_interaction_id,
+            "interaction_id": "",
             "used_search": used_search,
             "reasoning_details": None,
         })
